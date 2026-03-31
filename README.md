@@ -21,4 +21,18 @@ mkdir -p data/raw
 
 # Optional: enforce meaningful growth versus previous run
 .venv/bin/python scripts/run_scrape_cycle.py --vendors bluenile,leibish --require-growth --min-new-rows 100
+
+# Optional: enforce minimum source diversity + baseline coverage expansion (Phase 1/2 gates)
+.venv/bin/python scripts/run_scrape_cycle.py --vendors bluenile,leibish,ritani --require-min-active-vendors --min-active-vendors 3 --require-coverage-multiple --min-coverage-multiple 3.0
+
+# Optional: enforce full Phase 1/2 exit readiness checks in one gate
+.venv/bin/python scripts/run_scrape_cycle.py --vendors bluenile,leibish,ritani --require-phase12-exit --min-active-vendors 3 --min-coverage-multiple 3.0 --max-vendor-share 0.60 --min-weighted-cert-present-rate 0.70 --min-weighted-parse-success-rate 0.80
+
+# Optional: bootstrap additional vendors immediately via offline CSV imports
+# Put files like data/raw/vendor_imports/brilliance.csv and data/raw/vendor_imports/adiamor.csv,
+# then reference them as import:<alias> in --vendors.
+.venv/bin/python scripts/run_scrape_cycle.py --vendors bluenile,leibish,import:brilliance,import:adiamor --import-dir data/raw/vendor_imports --require-phase12-exit
 ```
+
+`run_summary.json` now includes `phase_progress` so Phase 1 (source diversity) and Phase 2 (coverage multiples) can be evaluated independently before enforcing both gates together.
+`run_summary.json` also includes `phase12_exit` with explicit checks/metrics/thresholds for declaring combined Phase 1+2 exit readiness.
