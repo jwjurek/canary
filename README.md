@@ -11,8 +11,14 @@ python3.12 -m venv .venv && source .venv/bin/activate
 .venv/bin/python -m playwright install chromium
 
 mkdir -p data/raw
-.venv/bin/python -m scrapers.blue_nile_scraper --max_pages 1 --max_cards 20 --use-chrome
+.venv/bin/python -m scrapers.blue_nile_scraper --max_cards 20 --use-chrome
 
 .venv/bin/python scripts/merge_and_clean.py --out data/clean/yellow_unified.csv
 .venv/bin/python scripts/train_model.py --data data/clean/yellow_unified.csv --out models
+
+# Repeated multi-vendor scrape cycle with history + potential mispricing flags
+.venv/bin/python scripts/run_scrape_cycle.py --vendors bluenile,leibish --max_cards 50 --max_pages 2
+
+# Optional: enforce meaningful growth versus previous run
+.venv/bin/python scripts/run_scrape_cycle.py --vendors bluenile,leibish --require-growth --min-new-rows 100
 ```
