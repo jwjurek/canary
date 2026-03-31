@@ -3,6 +3,19 @@
 Date: 2026-03-30
 Reviewer stance: skeptical principal engineer
 
+## Status update (2026-03-31)
+
+The repository has materially improved since this review was first written. Specifically:
+
+- Parser contract tests were added (fixture-based checks for Blue Nile/Leibish parsing contracts).
+- Blue Nile and Leibish scrapers now support artifact capture (`--artifacts-dir`) and extraction logs.
+- Dedupe moved to certificate-first with lab-aware keys plus tolerance-based geometry fallback.
+- Pre-train quality-report gating was added.
+- Baseline comparison, holdout metrics, and uncertainty-policy outputs were added to training.
+- A monotone-constraint retry guard was added to mitigate fold-time constraint-size mismatches.
+
+These are real improvements, but they do **not** close legal/compliance gaps, source-diversity risk, or transaction-ground-truth weaknesses.
+
 ## Executive verdict
 
 The current repository is **not a credible production path** to a defensible canary/yellow diamond pricing system. It is a fragile scraping demo plus an optimistic modeling script. It can generate numbers, but it cannot yet generate trustworthy prices.
@@ -11,17 +24,17 @@ The current repository is **not a credible production path** to a defensible can
 
 1. **Single-source dependence disguised as multi-vendor strategy.** Two "scrapers" are placeholders that always output empty CSVs, leaving effectively Blue Nile + Leibish only, and Leibish dominates volume. GroupKFold-by-vendor with ~2 active groups is not meaningful robustness.
 2. **No legal/compliance envelope.** There is no robots/TOS policy, no rate-limit protocol, no legal risk register, no provenance retention beyond a URL and scrape date.
-3. **Brittle extraction contracts.** Scrapers rely on CSS class substring selectors and page text regexes with no DOM contract tests; one frontend refresh can silently corrupt fields.
+3. **Brittle extraction contracts (partially mitigated).** Parser contract tests now exist, but extraction still relies on fragile CSS class substring selectors and title/slug regex fallbacks.
 4. **Asking-price modeling without transaction anchoring.** The model trains on listing prices only, no sold comps, no bid/ask spread handling, no stale listing control.
-5. **Dedupe logic can collapse distinct stones and retain false duplicates.** Attribute-key dedupe on rounded dimensions, shape, clarity, intensity, carat is collision-prone and not certificate-verified for large portions of data.
-6. **No data quality gate before training.** Pipeline drops NaNs in only price/carat and proceeds; no schema validation report, outlier quarantine, label-noise estimation, or vendor-shift diagnostics.
+5. **Dedupe remains heuristic-heavy for non-certified stones.** Cert-first/lab-aware matching is an improvement, but no pairwise precision/recall audit exists for no-cert geometry buckets.
+6. **Quality gate exists but is minimal.** The quality-report requirement is progress, but gating is still mostly parse/completeness thresholding and not a full data validation regime.
 7. **Model output packaging is incomplete for inference safety.** Saves model + preprocessor separately with no integrated prediction entrypoint, no versioned feature contract, and no drift monitor.
 
 ## Scraper/data acquisition audit
 
 ### Coverage reality
 - README claims multi-vendor collection, but Ritani and James Allen scrapers are explicit non-viable placeholders writing empty CSVs. That means no actual expansion capacity demonstrated.
-- Blue Nile query hard-filters to FI/FV and one listing URL; no true pagination implementation despite `max_pages` argument.
+- Blue Nile query still hard-filters to FI/FV and one listing URL; deterministic frontier/artifact capture improved reliability, but source breadth remains narrow.
 
 ### Robustness and extraction fidelity
 - Blue Nile relies on selector fragments like `[class*='wideJewelGridItemContainer']`, `[class*='price--']`, and `[class*='cui-info-table-rows']`. These are implementation-detail classes likely to churn.
@@ -32,12 +45,12 @@ The current repository is **not a credible production path** to a defensible can
 ### Legality / risk / operational safety
 - No robots.txt checks, no Terms-of-Service acceptance workflow, no request budget policy, no anti-bot escalation policy.
 - No source reliability scoring (retailer, aggregator, marketplace, verified-cert source) despite mixing potentially heterogeneous listing semantics.
-- No capture of HTML snapshots or response hashes for auditability/reproducibility.
+- HTML/spec sidecar artifact capture now exists for active scrapers; provenance is improved but still lacks a formal lineage/versioning contract.
 
 ### Provenance and maintainability
 - Schema includes only coarse provenance fields (`vendor`, `source_url`, `date_seen`), with no extraction method version, selector version, parser confidence, or raw payload reference.
-- No unit tests for `parse_spec_table`, `parse_detail_specs`, title regexes, or measurement parsing edge-cases.
-- `max_pages` in Blue Nile scrape signature is effectively ignored by logic, signaling maintenance drift between API and implementation.
+- Contract tests now cover `parse_spec_table`, `parse_detail_specs`, and title regex parsing.
+- Blue Nile CLI was corrected to remove misleading dead pagination argument and uses deterministic frontier handling.
 
 ## Data/model credibility audit
 
@@ -47,15 +60,30 @@ The current repository is **not a credible production path** to a defensible can
 - No treatment of repeated listings over time, stale inventory, withdrawn stones, or price revisions.
 
 ### Deduplication quality
-- Cert dedupe extracts 6–10 digit substrings from `cert_number`, which risks false matches and ignores certificate lab namespace.
-- Non-cert dedupe key uses rounded numeric and categorical concatenation; can merge non-identical stones and retain duplicates with slight rounding perturbations.
+- Cert dedupe now includes lab-aware normalization; this reduces collisions but still needs empirical dedupe QA.
+- Non-cert dedupe still uses tolerance-bucket heuristics and can mis-merge edge cases without an adjudicated match set.
 
 ### Modeling defensibility
-- Uses GroupKFold with `n_splits=min(5, n_groups)`; with 2 vendors, it's effectively 2-fold, unstable and easy to over-read.
+- Uses GroupKFold with `n_splits=min(5, n_groups)`; with 2 effective vendors, robustness claims remain limited.
 - Monotonic constraints only on carat-derived features; no economic sanity constraints on clarity/intensity interactions.
-- Evaluates on log-price MAE/R² but does not report calibration error in original dollars, tail risk, or uncertainty intervals.
+- Adds baseline comparison and holdout metrics, but still over-relies on listing-price labels and limited vendor diversity.
 - SHAP is computed on transformed training data only; no holdout explanation or stability check.
-- No baseline comparison (e.g., price-per-carat stratified medians) to justify XGBoost complexity.
+- Baseline predictor and model-vs-baseline gate now exist (positive step).
+
+## Implementation status vs prior top-10 actions
+
+| Action | Status | Notes |
+|---|---|---|
+| 1. Source policy / min active sources | **Partially done** | Source registry and minimum-source gate exist, but operational CI enforcement is still manual. |
+| 2. Legal compliance gate | **Not done** | Still no robots/TOS/legal signoff framework in code. |
+| 3. Parser contract tests | **Done** | Fixture-based parser tests added. |
+| 4. Deterministic frontier / dead args | **Done** | Blue Nile dead pagination arg removed; deterministic frontier behavior implemented. |
+| 5. Raw artifacts + extraction logs | **Done** | Active scrapers emit artifacts/logs with `--artifacts-dir`. |
+| 6. Certificate-first dedupe redesign | **Partially done** | Lab-aware cert matching + geometry fallback implemented; dedupe QA benchmarking still missing. |
+| 7. Required data-quality artifact | **Done (basic)** | Quality report required by training unless explicitly bypassed. |
+| 8. Baseline + holdout requirements | **Done (basic)** | Baseline and holdout metrics added with a minimum-improvement gate. |
+| 9. Uncertainty + reject policy | **Done (basic)** | OOF residual-based uncertainty policy and sparse-feature reject rule added. |
+| 10. Rewrite external claims/docs | **Not done** | README/SUMMARY still lag reality in places. |
 
 ## Phased go-forward plan
 
@@ -103,6 +131,6 @@ The current repository is **not a credible production path** to a defensible can
 
 ## Final judgment
 
-**Reset, not continue.**
+**Continue with controlled scope (not production rollout).**
 
-Do not scale this code as-is. Keep only the skeleton and rebuild around compliance, provenance, robust acquisition, and validation discipline. Right now the system can produce a model file, but not a pricing system you can defend in front of legal, data science, or commercial leadership.
+Do not treat this as production-ready. The repo moved from “fragile prototype” to “structured prototype with gates,” which is enough to continue iterative hardening. It is still not defensible for production pricing without legal/compliance controls, source expansion, and stronger ground-truth validation.
